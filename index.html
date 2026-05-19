@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Peluk — Cerita Bebas, Didengar Hangat</title>
+<link rel="icon" type="image/png" href="Logo-Peluk.png">
+<link rel="apple-touch-icon" href="Logo-Peluk.png">
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600&family=Cormorant+Garamond:ital@0;1&display=swap" rel="stylesheet"/>
+</head>
+<body>
+<div class="bg-soft"></div>
+<div class="blob blob1"></div>
+<div class="blob blob2"></div>
+
+<div class="container">
+  <div class="header">
+    <img src="Logo-Peluk.png" alt="Logo Peluk" class="logo-img" onerror="this.style.display='none'; this.nextSibling.style.display='block';">
+    <div style="display: none; font-family: 'Cormorant Garamond', serif; font-size: 2rem; color: #b47c66;">Peluk</div>
+  </div>
+
+  <div class="card" id="mainForm">
+    <div class="label">🌸 ceritakan apa pun yang kamu rasa</div>
+    <textarea id="curhat" placeholder="Aku lagi ngerasa… capek banget, kayak nggak ada yang ngertiin…"></textarea>
+    <div class="moods" id="moodContainer">
+      <button class="chip" data-mood="sedih">😔 sedih</button>
+      <button class="chip" data-mood="kesal">😤 kesal</button>
+      <button class="chip" data-mood="cemas">😰 cemas</button>
+      <button class="chip" data-mood="kecewa">😞 kecewa</button>
+      <button class="chip" data-mood="lelah">😴 lelah</button>
+      <button class="chip" data-mood="butuh dukungan">🥺 butuh dukungan</button>
+    </div>
+    <button id="send">kirim curhatan 🤍</button>
+  </div>
+
+  <div id="chatContainer" class="chat-container"></div>
+
+  <footer>dibuat untuk kamu yang butuh peluk hangat</footer>
+</div>
+
+<script>
+  let conversationHistory = [];
+
+  const chatContainer = document.getElementById('chatContainer');
+  let selectedMood = '';
+
+  const chips = document.querySelectorAll('.chip');
+  chips.forEach(chip => {
+    chip.addEventListener('click', function() {
+      const moodVal = this.getAttribute('data-mood');
+      if (selectedMood === moodVal) {
+        selectedMood = '';
+        this.classList.remove('active');
+      } else {
+        chips.forEach(c => c.classList.remove('active'));
+        selectedMood = moodVal;
+        this.classList.add('active');
+      }
+    });
+  });
+
+  const sendBtn = document.getElementById('send');
+  const textarea = document.getElementById('curhat');
+
+  function addUserMessage(text, moodEmoji = '') {
+    const userDiv = document.createElement('div');
+    userDiv.className = 'message-user';
+    let prefix = moodEmoji ? moodEmoji + ' ' : '';
+    userDiv.innerText = prefix + text;
+    chatContainer.appendChild(userDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
+
+  function addAssistantLoading() {
+    const assistantDiv = document.createElement('div');
+    assistantDiv.className = 'message-assistant';
+    assistantDiv.id = 'temp-assistant-' + Date.now();
+    assistantDiv.innerHTML = `
+      <div class="assistant-name">
+        <span>🌿</span>
+        <span>Peluk</span>
+      </div>
+      <div class="assistant-content">
+        <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      </div>
+    `;
+    chatContainer.appendChild(assistantDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    return assistantDiv;
+  }
+
+  function updateAssistantMessage(assistantDiv, mainText, afirmasiList) {
+        const paragraphs = mainText.trim().split(/\n\n+/).filter(p => p.trim().length > 0);
+    let contentHtml = '';
+    if (paragraphs.length === 0) {
+      contentHtml = '<p>🌸 Peluk selalu di sini untukmu.</p>';
+    } else {
+      paragraphs.forEach(p => {
+        contentHtml += `<p>${p.replace(/\n/g, '<br>')}</p>`;
+      });
+    }
+
+    let pillsHtml = '';
+    if (afirmasiList && afirmasiList.length > 0) {
+      pillsHtml = `<div class="afirmasi-pills">${afirmasiList.map(txt => `<span class="pill">🌸 ${txt}</span>`).join('')}</div>`;
+    }
+
+    assistantDiv.innerHTML = `
+      <div class="assistant-name">
+        <span>🌿</span>
+        <span>Peluk</span>
+      </div>
+      <div class="assistant-content">
+        ${contentHtml}
+        ${pillsHtml}
+      </div>
+    `;
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
+
+  async function kirimCurhat() {
+    const text = textarea.value.trim();
+    if (!text) {
+      textarea.focus();
+      return;
+    }
+
+    let moodEmoji = '';
+    if (selectedMood === 'sedih') moodEmoji = '😔';
+    else if (selectedMood === 'kesal') moodEmoji = '😤';
+    else if (selectedMood === 'cemas') moodEmoji = '😰';
+    else if (selectedMood === 'kecewa') moodEmoji = '😞';
+    else if (selectedMood === 'lelah') moodEmoji = '😴';
+    else if (selectedMood === 'butuh dukungan') moodEmoji = '🥺';
+
+    addUserMessage(text, moodEmoji);
+
+    const loadingDiv = addAssistantLoading();
+
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'sedang mendengarkan... 🌼';
+
+    try {
+      const res = await fetch('/.netlify/functions/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: text,
+          mood: selectedMood,
+          history: conversationHistory,
+        }),
+      });
+
+      if (res.status === 429) {
+        updateAssistantMessage(loadingDiv, 
+          "🌙 Wah, hari ini kamu sudah banyak sekali bercerita ya...\n\nTenang saja, Peluk tetap di sini. Coba lagi besok, ya? Aku akan selalu nungguin kamu. 💛\n\nIstirahat dulu, jaga diri baik-baik.",
+          []
+        );
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'kirim curhatan 🤍';
+        return;
+      }
+
+      const data = await res.json();
+      const fullReply = data.reply || '';
+
+      let mainPart = fullReply;
+      let rawAfirmasi = '';
+      const afirIndex = fullReply.search(/AFIRMASI:/i);
+      if (afirIndex !== -1) {
+        mainPart = fullReply.substring(0, afirIndex).trim();
+        rawAfirmasi = fullReply.substring(afirIndex + 9).trim();
+      }
+      let afirmasiList = [];
+      if (rawAfirmasi) {
+        afirmasiList = rawAfirmasi.split('|').map(s => s.trim()).filter(s => s.length > 0);
+      }
+
+      updateAssistantMessage(loadingDiv, mainPart, afirmasiList);
+
+      const moodText = selectedMood ? `(mood: ${selectedMood}) ` : '';
+      conversationHistory.push({
+        role: 'user',
+        content: `${moodText}${text}`
+      });
+      conversationHistory.push({
+        role: 'assistant',
+        content: fullReply
+      });
+      if (conversationHistory.length > 20) {
+        conversationHistory = conversationHistory.slice(-20);
+      }
+
+    } catch (err) {
+      console.error(err);
+      updateAssistantMessage(loadingDiv, "🤍 Maaf, ada sedikit gangguan. Coba ulangi ya, Peluk tetap di sini untukmu.", []);
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'kirim curhatan 🤍';
+      textarea.value = '';
+      selectedMood = '';
+      chips.forEach(c => c.classList.remove('active'));
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+  }
+
+  sendBtn.addEventListener('click', kirimCurhat);
+  textarea.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      kirimCurhat();
+    }
+  });
+</script>
+</body>
+</html>
